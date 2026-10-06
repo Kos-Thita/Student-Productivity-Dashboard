@@ -1,0 +1,21 @@
+{
+  "name": "student-productivity-dashboard",
+  "version": "1.0.0",
+  "description": "A student-focused productivity and assignment management dashboard",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "keywords": [
+    "student",
+    "productivity",
+    "dashboard",
+    "assignments",
+    "tasks"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
