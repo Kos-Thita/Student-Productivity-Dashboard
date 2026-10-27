@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": 1,
+    "title": "Assign 1",
+    "subject": "CC",
+    "description": "Complete fast",
+    "deadline": "2026-10-28",
+    "priority": "High",
+    "status": "Pending",
+    "createdAt": "2026-10-27"
+  }
+]

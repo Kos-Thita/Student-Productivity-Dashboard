@@ -169,3 +169,40 @@ GitHub --> Jenkins --> Docker --> AWS EC2
 - Application starts automatically with `npm start`
 - Port 8000 is exposed by default
 - Compatible with Ubuntu-based EC2 instances
+
+
+## Cloud Edition: Analytics and Runtime Monitoring
+
+The upgraded UI includes Overview, Tasks, Analytics, and Cloud Monitor pages.
+
+### New endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/health` | Lightweight application health check and uptime |
+| GET | `/api/monitor` | Runtime telemetry: CPU estimate, Node process RSS/heap, runtime memory, Node version, platform, and process ID |
+
+The Cloud Monitor refreshes every five seconds while the page is open. Docker's image now defines a `HEALTHCHECK` against `/api/health`, so Docker can mark the container healthy or unhealthy after the updated image is deployed.
+
+**Monitoring scope:** `/api/monitor` reports the metrics visible to the Node.js process. It is not a full EC2 host-level monitoring solution and does not replace AWS CloudWatch. For full EC2 metrics, configure CloudWatch/CloudWatch Agent and appropriate IAM permissions. Do not expose the Docker Engine socket publicly.
+
+### Run and test locally
+
+```bash
+npm install
+npm start
+```
+
+Open `http://localhost:8000`, then select **Cloud Monitor**. You can also test the endpoints directly:
+
+```bash
+curl http://localhost:8000/api/health
+curl http://localhost:8000/api/monitor
+```
+
+After deploying the new Docker image, inspect Docker's health state on EC2 with:
+
+```bash
+sudo docker ps
+sudo docker inspect --format='{{json .State.Health}}' student-productivity-dashboard
+```

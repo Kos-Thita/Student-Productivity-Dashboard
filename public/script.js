@@ -159,6 +159,7 @@
         tasks = data;
         renderTasks();
         loadStats();
+        if (!analyticsPage.hidden) renderAnalytics();
       })
       .catch(function (err) {
         showToast('Failed to load tasks.', 'error');
@@ -572,6 +573,114 @@
       if (deleteModalOverlay.classList.contains('open')) closeDeleteModal();
     }
   });
+
+
+  // --- Navigation, analytics, and live cloud monitor ---
+  const navButtons = document.querySelectorAll('.nav-btn');
+  const statsSection = document.getElementById('stats-section');
+  const toolbarSection = document.getElementById('toolbar');
+  const tasksSection = document.getElementById('tasks-section');
+  const analyticsPage = document.getElementById('page-analytics');
+  const cloudPage = document.getElementById('page-cloud');
+  let monitorTimer = null;
+
+  function showPage(page) {
+    navButtons.forEach(function (button) {
+      button.classList.toggle('active', button.getAttribute('data-page') === page);
+    });
+    const mainPages = [statsSection, toolbarSection, tasksSection];
+    mainPages.forEach(function (section) { section.hidden = page === 'analytics' || page === 'cloud' || (page === 'tasks' && section === statsSection); });
+    analyticsPage.hidden = page !== 'analytics';
+    cloudPage.hidden = page !== 'cloud';
+    if (page === 'analytics') renderAnalytics();
+    if (page === 'cloud') refreshMonitor();
+  }
+
+  navButtons.forEach(function (button) {
+    button.addEventListener('click', function () { showPage(button.getAttribute('data-page')); });
+  });
+
+  function addAnalyticsBar(container, label, count, total, colorClass) {
+    const row = document.createElement('div');
+    row.className = 'analytics-bar-row';
+    const safeTotal = Math.max(total, 1);
+    row.innerHTML = '<div class="analytics-bar-label"><span></span><strong></strong></div><div class="analytics-track"><span></span></div>';
+    row.querySelector('.analytics-bar-label span').textContent = label;
+    row.querySelector('.analytics-bar-label strong').textContent = count;
+    const fill = row.querySelector('.analytics-track span');
+    fill.style.width = Math.round(count / safeTotal * 100) + '%';
+    fill.className = colorClass || '';
+    container.appendChild(row);
+  }
+
+  function renderAnalytics() {
+    const status = document.getElementById('analytics-status');
+    const priority = document.getElementById('analytics-priority');
+    const recommendations = document.getElementById('study-recommendations');
+    status.textContent = '';
+    priority.textContent = '';
+    recommendations.textContent = '';
+    const completed = tasks.filter(function (task) { return task.status === 'Completed'; }).length;
+    const overdue = tasks.filter(isOverdue).length;
+    const pending = tasks.filter(function (task) { return task.status === 'Pending' && !isOverdue(task); }).length;
+    addAnalyticsBar(status, 'Completed', completed, tasks.length, 'bar-green');
+    addAnalyticsBar(status, 'Pending', pending, tasks.length, 'bar-yellow');
+    addAnalyticsBar(status, 'Overdue', overdue, tasks.length, 'bar-red');
+    ['High', 'Medium', 'Low'].forEach(function (level, index) {
+      addAnalyticsBar(priority, level, tasks.filter(function (task) { return task.priority === level; }).length, tasks.length, ['bar-red', 'bar-yellow', 'bar-blue'][index]);
+    });
+    const suggestions = [];
+    if (overdue) suggestions.push(overdue + ' overdue task' + (overdue === 1 ? ' needs' : 's need') + ' your attention first.');
+    const upcoming = tasks.filter(function (task) { return task.status === 'Pending' && task.deadline >= getToday(); }).sort(function (a, b) { return a.deadline.localeCompare(b.deadline); })[0];
+    if (upcoming) suggestions.push('Next deadline: "' + upcoming.title + '" on ' + formatDate(upcoming.deadline) + '.');
+    if (!tasks.length) suggestions.push('Add your first assignment to unlock personalized workload insights.');
+    if (tasks.length && !overdue && !upcoming) suggestions.push('Great work — there are no pending or overdue assignments.');
+    suggestions.forEach(function (suggestion) {
+      const item = document.createElement('p');
+      item.className = 'recommendation-item';
+      item.textContent = suggestion;
+      recommendations.appendChild(item);
+    });
+  }
+
+  function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor(seconds % 86400 / 3600);
+    const minutes = Math.floor(seconds % 3600 / 60);
+    const secs = seconds % 60;
+    return (days ? days + 'd ' : '') + hours + 'h ' + minutes + 'm ' + secs + 's';
+  }
+
+  function refreshMonitor() {
+    apiGet('/api/monitor').then(function (data) {
+      document.getElementById('monitor-banner').classList.remove('monitor-offline');
+      document.getElementById('monitor-status').textContent = 'Application is healthy';
+      document.getElementById('monitor-updated').textContent = 'Last updated: ' + new Date(data.timestamp).toLocaleTimeString();
+      document.getElementById('monitor-uptime').textContent = formatUptime(data.uptimeSeconds);
+      document.getElementById('monitor-cpu').textContent = data.cpuPercent === null ? 'Collecting sample…' : data.cpuPercent + '%';
+      document.getElementById('monitor-cpu-bar').style.width = (data.cpuPercent === null ? 0 : data.cpuPercent) + '%';
+      document.getElementById('monitor-memory').textContent = data.processMemoryMB + ' MB';
+      document.getElementById('monitor-memory-bar').style.width = Math.min(100, data.processMemoryMB / Math.max(data.runtimeTotalMemoryMB, 1) * 100) + '%';
+      document.getElementById('monitor-heap').textContent = data.heapUsedMB + ' / ' + data.heapTotalMB + ' MB';
+      document.getElementById('monitor-node').textContent = data.nodeVersion;
+      document.getElementById('monitor-platform').textContent = data.platform;
+      document.getElementById('monitor-pid').textContent = data.pid;
+      document.getElementById('monitor-cores').textContent = data.cpuCores;
+    }).catch(function () {
+      document.getElementById('monitor-banner').classList.add('monitor-offline');
+      document.getElementById('monitor-status').textContent = 'Application unavailable';
+      document.getElementById('monitor-updated').textContent = 'Cannot reach /api/monitor. Check whether the app is running.';
+      ['monitor-uptime','monitor-cpu','monitor-memory','monitor-heap'].forEach(function (id) {
+        document.getElementById(id).textContent = '—';
+      });
+    });
+  }
+  document.getElementById('monitor-refresh').addEventListener('click', refreshMonitor);
+  document.getElementById('analytics-refresh').addEventListener('click', renderAnalytics);
+  monitorTimer = setInterval(function () {
+    if (!cloudPage.hidden) refreshMonitor();
+  }, 5000);
+
 
   // --- Init ---
   loadTasks();

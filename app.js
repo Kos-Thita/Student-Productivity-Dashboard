@@ -216,6 +216,63 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
+
+// --- Health and live runtime monitoring endpoints ---
+// These report the running Node.js application and runtime memory/CPU estimates.
+// They do not claim to be full EC2 host metrics.
+let previousCpuSample = null;
+
+function cpuSnapshot() {
+  const cpus = require('os').cpus();
+  let idle = 0;
+  let total = 0;
+  cpus.forEach(cpu => {
+    Object.values(cpu.times).forEach(value => { total += value; });
+    idle += cpu.times.idle;
+  });
+  return { idle, total, cores: cpus.length };
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'student-productivity-dashboard',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime())
+  });
+});
+
+app.get('/api/monitor', (req, res) => {
+  const os = require('os');
+  const currentCpu = cpuSnapshot();
+  let cpuPercent = null;
+  if (previousCpuSample) {
+    const totalDiff = currentCpu.total - previousCpuSample.total;
+    const idleDiff = currentCpu.idle - previousCpuSample.idle;
+    if (totalDiff > 0) cpuPercent = Math.round((1 - idleDiff / totalDiff) * 100);
+  }
+  previousCpuSample = currentCpu;
+
+  const memory = process.memoryUsage();
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    status: 'healthy',
+    service: 'student-productivity-dashboard',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    cpuPercent,
+    cpuCores: currentCpu.cores,
+    processMemoryMB: Math.round(memory.rss / 1024 / 1024),
+    heapUsedMB: Math.round(memory.heapUsed / 1024 / 1024),
+    heapTotalMB: Math.round(memory.heapTotal / 1024 / 1024),
+    runtimeFreeMemoryMB: Math.round(os.freemem() / 1024 / 1024),
+    runtimeTotalMemoryMB: Math.round(os.totalmem() / 1024 / 1024),
+    nodeVersion: process.version,
+    platform: process.platform,
+    pid: process.pid
+  });
+});
+
 // Start server
 ensureDataFile();
 app.listen(PORT, () => {
