@@ -5,6 +5,28 @@
 (function () {
   'use strict';
 
+  // --- Appearance: persistent light/dark theme ---
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeStorageKey = 'spd-theme';
+
+  function applyTheme(theme) {
+    const selectedTheme = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = selectedTheme;
+    if (themeToggle) {
+      const nextTheme = selectedTheme === 'dark' ? 'light' : 'dark';
+      themeToggle.setAttribute('aria-label', 'Switch to ' + nextTheme + ' mode');
+      themeToggle.setAttribute('title', 'Switch to ' + nextTheme + ' mode');
+    }
+    try { localStorage.setItem(themeStorageKey, selectedTheme); } catch (_) { /* Storage may be unavailable. */ }
+  }
+
+  if (themeToggle) {
+    applyTheme(document.documentElement.dataset.theme || 'light');
+    themeToggle.addEventListener('click', function () {
+      applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    });
+  }
+
   // --- State ---
   let tasks = [];
   let currentFilter = 'all';
@@ -67,7 +89,7 @@
   }
 
   function isOverdue(task) {
-    return task.status === 'Pending' && task.deadline < getToday();
+    return task.status !== 'Completed' && task.deadline < getToday();
   }
 
   function formatDate(dateStr) {
@@ -160,6 +182,8 @@
         renderTasks();
         loadStats();
         if (!analyticsPage.hidden) renderAnalytics();
+        if (!calendarPage.hidden) renderCalendar();
+        if (!kanbanPage.hidden) renderKanban();
       })
       .catch(function (err) {
         showToast('Failed to load tasks.', 'error');
@@ -190,7 +214,7 @@
 
     // Filter
     if (currentFilter === 'pending') {
-      filtered = filtered.filter(function (t) { return t.status === 'Pending' && !isOverdue(t); });
+      filtered = filtered.filter(function (t) { return t.status !== 'Completed' && !isOverdue(t); });
     } else if (currentFilter === 'completed') {
       filtered = filtered.filter(function (t) { return t.status === 'Completed'; });
     } else if (currentFilter === 'overdue') {
@@ -268,7 +292,7 @@
       statusLabel = 'Overdue';
     } else {
       statusBadgeClass += 'pending';
-      statusLabel = 'Pending';
+      statusLabel = task.status === 'In Progress' ? 'In Progress' : 'Pending';
     }
 
     // Priority badge class
@@ -582,18 +606,27 @@
   const tasksSection = document.getElementById('tasks-section');
   const analyticsPage = document.getElementById('page-analytics');
   const cloudPage = document.getElementById('page-cloud');
+  const calendarPage = document.getElementById('page-calendar');
+  const kanbanPage = document.getElementById('page-kanban');
+  const focusPage = document.getElementById('page-focus');
   let monitorTimer = null;
 
   function showPage(page) {
     navButtons.forEach(function (button) {
       button.classList.toggle('active', button.getAttribute('data-page') === page);
     });
-    const mainPages = [statsSection, toolbarSection, tasksSection];
-    mainPages.forEach(function (section) { section.hidden = page === 'analytics' || page === 'cloud' || (page === 'tasks' && section === statsSection); });
+    statsSection.hidden = page !== 'overview';
+    toolbarSection.hidden = page !== 'overview' && page !== 'tasks';
+    tasksSection.hidden = page !== 'overview' && page !== 'tasks';
     analyticsPage.hidden = page !== 'analytics';
     cloudPage.hidden = page !== 'cloud';
+    calendarPage.hidden = page !== 'calendar';
+    kanbanPage.hidden = page !== 'kanban';
+    focusPage.hidden = page !== 'focus';
     if (page === 'analytics') renderAnalytics();
     if (page === 'cloud') refreshMonitor();
+    if (page === 'calendar') renderCalendar();
+    if (page === 'kanban') renderKanban();
   }
 
   navButtons.forEach(function (button) {
@@ -622,7 +655,7 @@
     recommendations.textContent = '';
     const completed = tasks.filter(function (task) { return task.status === 'Completed'; }).length;
     const overdue = tasks.filter(isOverdue).length;
-    const pending = tasks.filter(function (task) { return task.status === 'Pending' && !isOverdue(task); }).length;
+    const pending = tasks.filter(function (task) { return task.status !== 'Completed' && !isOverdue(task); }).length;
     addAnalyticsBar(status, 'Completed', completed, tasks.length, 'bar-green');
     addAnalyticsBar(status, 'Pending', pending, tasks.length, 'bar-yellow');
     addAnalyticsBar(status, 'Overdue', overdue, tasks.length, 'bar-red');
@@ -631,7 +664,7 @@
     });
     const suggestions = [];
     if (overdue) suggestions.push(overdue + ' overdue task' + (overdue === 1 ? ' needs' : 's need') + ' your attention first.');
-    const upcoming = tasks.filter(function (task) { return task.status === 'Pending' && task.deadline >= getToday(); }).sort(function (a, b) { return a.deadline.localeCompare(b.deadline); })[0];
+    const upcoming = tasks.filter(function (task) { return task.status !== 'Completed' && task.deadline >= getToday(); }).sort(function (a, b) { return a.deadline.localeCompare(b.deadline); })[0];
     if (upcoming) suggestions.push('Next deadline: "' + upcoming.title + '" on ' + formatDate(upcoming.deadline) + '.');
     if (!tasks.length) suggestions.push('Add your first assignment to unlock personalized workload insights.');
     if (tasks.length && !overdue && !upcoming) suggestions.push('Great work — there are no pending or overdue assignments.');
@@ -681,6 +714,118 @@
     if (!cloudPage.hidden) refreshMonitor();
   }, 5000);
 
+
+
+  // --- Calendar view ---
+  let calendarCursor = new Date();
+  let selectedCalendarDate = getToday();
+  function dateKey(year, month, day) { return year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0'); }
+  function renderCalendar() {
+    const grid = document.getElementById('calendar-grid');
+    const year = calendarCursor.getFullYear(), month = calendarCursor.getMonth();
+    document.getElementById('calendar-month-label').textContent = calendarCursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    grid.innerHTML = '';
+    const firstDay = new Date(year, month, 1).getDay();
+    const days = new Date(year, month + 1, 0).getDate();
+    const totalCells = Math.ceil((firstDay + days) / 7) * 7;
+    for (let i = 0; i < totalCells; i++) {
+      const day = i - firstDay + 1;
+      const cell = document.createElement('button');
+      cell.type = 'button'; cell.className = 'calendar-day';
+      if (day < 1 || day > days) { cell.classList.add('outside'); cell.disabled = true; }
+      else {
+        const key = dateKey(year, month, day);
+        const dayTasks = tasks.filter(t => t.deadline === key);
+        if (key === getToday()) cell.classList.add('today');
+        if (key === selectedCalendarDate) cell.classList.add('selected');
+        const number = document.createElement('span'); number.className = 'calendar-day-number'; number.textContent = day; cell.appendChild(number);
+        if (dayTasks.length) {
+          const dots = document.createElement('span'); dots.className = 'calendar-task-dots';
+          dayTasks.slice(0, 3).forEach(t => { const dot = document.createElement('i'); dot.className = t.status === 'Completed' ? 'done' : (isOverdue(t) ? 'late' : ''); dots.appendChild(dot); });
+          cell.appendChild(dots);
+          const count = document.createElement('small'); count.textContent = dayTasks.length + (dayTasks.length === 1 ? ' task' : ' tasks'); cell.appendChild(count);
+        }
+        cell.addEventListener('click', function () { selectedCalendarDate = key; renderCalendar(); renderCalendarAgenda(); });
+      }
+      grid.appendChild(cell);
+    }
+    renderCalendarAgenda();
+  }
+  function renderCalendarAgenda() {
+    const date = document.getElementById('agenda-date');
+    const list = document.getElementById('calendar-agenda-list');
+    date.textContent = formatDate(selectedCalendarDate); list.innerHTML = '';
+    const matches = tasks.filter(t => t.deadline === selectedCalendarDate);
+    if (!matches.length) { const empty = document.createElement('p'); empty.className = 'muted-copy'; empty.textContent = 'No assignments due on this date.'; list.appendChild(empty); return; }
+    matches.forEach(task => { const item = document.createElement('button'); item.type = 'button'; item.className = 'agenda-task'; const title = document.createElement('strong'); title.textContent = task.title; const meta = document.createElement('span'); meta.textContent = task.subject + ' · ' + task.status; item.append(title, meta); item.addEventListener('click', () => { showPage('tasks'); showToast('Find “' + task.title + '” in your task list.', 'success'); }); list.appendChild(item); });
+  }
+  document.getElementById('calendar-prev').addEventListener('click', () => { calendarCursor.setMonth(calendarCursor.getMonth() - 1); renderCalendar(); });
+  document.getElementById('calendar-next').addEventListener('click', () => { calendarCursor.setMonth(calendarCursor.getMonth() + 1); renderCalendar(); });
+  document.getElementById('calendar-today').addEventListener('click', () => { calendarCursor = new Date(); selectedCalendarDate = getToday(); renderCalendar(); });
+  document.getElementById('calendar-add-task').addEventListener('click', () => { showPage('tasks'); btnAddTask.click(); });
+
+  // --- Kanban board with persisted status changes ---
+  function renderKanban() {
+    const columns = { 'Pending': document.getElementById('kanban-pending'), 'In Progress': document.getElementById('kanban-progress'), 'Completed': document.getElementById('kanban-completed') };
+    Object.values(columns).forEach(el => el.innerHTML = '');
+    const counts = { 'Pending': 0, 'In Progress': 0, 'Completed': 0 };
+    tasks.forEach(task => {
+      const status = columns[task.status] ? task.status : 'Pending'; counts[status]++;
+      const card = document.createElement('article'); card.className = 'kanban-card'; card.draggable = true; card.dataset.id = task.id;
+      const title = document.createElement('h4'); title.textContent = task.title;
+      const subject = document.createElement('p'); subject.textContent = task.subject;
+      const footer = document.createElement('div'); footer.className = 'kanban-card-footer';
+      const priority = document.createElement('span'); priority.className = 'priority-chip priority-' + String(task.priority).toLowerCase(); priority.textContent = task.priority;
+      const due = document.createElement('span'); due.textContent = formatDate(task.deadline);
+      footer.append(priority, due); card.append(title, subject, footer);
+      card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', String(task.id)); card.classList.add('dragging'); });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+      columns[status].appendChild(card);
+    });
+    document.getElementById('count-pending').textContent = counts.Pending;
+    document.getElementById('count-progress').textContent = counts['In Progress'];
+    document.getElementById('count-completed').textContent = counts.Completed;
+  }
+  document.querySelectorAll('.kanban-column').forEach(column => {
+    column.addEventListener('dragover', e => { e.preventDefault(); column.classList.add('drag-over'); });
+    column.addEventListener('dragleave', () => column.classList.remove('drag-over'));
+    column.addEventListener('drop', e => {
+      e.preventDefault(); column.classList.remove('drag-over');
+      const id = Number(e.dataTransfer.getData('text/plain')); const status = column.dataset.status;
+      const task = tasks.find(t => t.id === id); if (!task || task.status === status) return;
+      apiPut('/api/tasks/' + id, { status }).then(() => { loadTasks(); renderKanban(); showToast('Task moved to ' + status + '.', 'success'); }).catch(err => showToast(err.message, 'error'));
+    });
+  });
+  document.getElementById('kanban-add-task').addEventListener('click', () => { showPage('tasks'); btnAddTask.click(); });
+
+  // --- Pomodoro timer (session statistics are stored per browser) ---
+  let focusDuration = 25 * 60, focusRemaining = focusDuration, focusInterval = null, focusRunning = false, focusMode = 'Focus';
+  const focusStatsKey = 'spd-focus-stats-' + getToday();
+  function getFocusStats() { try { return JSON.parse(localStorage.getItem(focusStatsKey)) || { sessions: 0, minutes: 0 }; } catch (_) { return { sessions: 0, minutes: 0 }; } }
+  function renderFocusStats() { const stats = getFocusStats(); document.getElementById('focus-session-count').textContent = stats.sessions; document.getElementById('focus-minutes-count').textContent = stats.minutes; }
+  function renderFocusClock() { const m = Math.floor(focusRemaining / 60), sec = focusRemaining % 60; document.getElementById('focus-clock').textContent = String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0'); document.title = focusRunning ? document.getElementById('focus-clock').textContent + ' · Focus' : 'Student Productivity Dashboard'; }
+  function stopFocusTimer() { if (focusInterval) clearInterval(focusInterval); focusInterval = null; focusRunning = false; document.getElementById('focus-start').textContent = 'Start'; }
+  function completeFocusTimer() {
+    stopFocusTimer();
+    if (focusMode === 'Focus') { const stats = getFocusStats(); stats.sessions++; stats.minutes += Math.round(focusDuration / 60); localStorage.setItem(focusStatsKey, JSON.stringify(stats)); renderFocusStats(); }
+    document.getElementById('focus-hint').textContent = focusMode + ' complete. Take a moment before the next session.';
+    if ('Notification' in window && Notification.permission === 'granted') new Notification(focusMode + ' complete', { body: 'Your timer has finished.' });
+    renderFocusClock();
+  }
+  document.getElementById('focus-start').addEventListener('click', function () {
+    if (focusRunning) { stopFocusTimer(); return; }
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    focusRunning = true; this.textContent = 'Pause'; document.getElementById('focus-hint').textContent = 'Stay with the task until the timer ends.';
+    focusInterval = setInterval(() => { focusRemaining--; renderFocusClock(); if (focusRemaining <= 0) completeFocusTimer(); }, 1000);
+  });
+  document.getElementById('focus-reset').addEventListener('click', () => { stopFocusTimer(); focusRemaining = focusDuration; renderFocusClock(); document.getElementById('focus-hint').textContent = 'Timer reset. Start when you are ready.'; });
+  document.querySelectorAll('.focus-mode').forEach(button => button.addEventListener('click', function () {
+    stopFocusTimer(); focusMode = this.dataset.mode; focusDuration = Number(this.dataset.minutes) * 60; focusRemaining = focusDuration;
+    document.querySelectorAll('.focus-mode').forEach(b => b.classList.toggle('active', b === this));
+    document.getElementById('focus-mode-label').textContent = focusMode.toUpperCase() + ' SESSION'; document.getElementById('focus-hint').textContent = 'Settle in and begin when ready.'; renderFocusClock();
+  }));
+  document.getElementById('focus-clear-stats').addEventListener('click', () => { localStorage.removeItem(focusStatsKey); renderFocusStats(); });
+  renderFocusStats(); renderFocusClock();
 
   // --- Init ---
   loadTasks();

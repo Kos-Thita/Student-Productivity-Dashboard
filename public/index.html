@@ -8,6 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    (function () {
+      try { document.documentElement.dataset.theme = localStorage.getItem("spd-theme") || "light"; }
+      catch (_) { document.documentElement.dataset.theme = "light"; }
+    })();
+  </script>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -26,9 +32,17 @@
       <nav class="primary-nav" aria-label="Main navigation">
         <button class="nav-btn active" data-page="overview" type="button">Overview</button>
         <button class="nav-btn" data-page="tasks" type="button">Tasks</button>
+        <button class="nav-btn" data-page="calendar" type="button">Calendar</button>
+        <button class="nav-btn" data-page="kanban" type="button">Kanban</button>
+        <button class="nav-btn" data-page="focus" type="button">Focus</button>
         <button class="nav-btn" data-page="analytics" type="button">Analytics</button>
         <button class="nav-btn" data-page="cloud" type="button">Cloud Monitor</button>
       </nav>
+      <div class="header-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.5 8.5 0 1 0 20.2 15.4Z"/></svg>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+        </button>
       <button class="btn btn-primary" id="btn-add-task" type="button">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -36,6 +50,7 @@
         </svg>
         Add Assignment
       </button>
+      </div>
     </div>
   </header>
 
@@ -153,6 +168,25 @@
         <p id="empty-state-text">Add your first assignment to get started.</p>
       </div>
     </section>
+
+    <!-- Calendar -->
+    <section class="extra-page" id="page-calendar" hidden>
+      <div class="page-heading"><div><p class="eyebrow">PLAN YOUR WORKLOAD</p><h2>Calendar</h2><p>See every deadline in one place.</p></div><div class="calendar-controls"><button class="btn btn-secondary" id="calendar-prev" type="button" aria-label="Previous month">‹</button><strong id="calendar-month-label"></strong><button class="btn btn-secondary" id="calendar-next" type="button" aria-label="Next month">›</button><button class="btn btn-secondary" id="calendar-today" type="button">Today</button></div></div>
+      <div class="calendar-layout"><div class="panel calendar-panel"><div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div id="calendar-grid" class="calendar-grid"></div></div><aside class="panel calendar-agenda"><p class="eyebrow">SELECTED DATE</p><h3 id="agenda-date">Choose a date</h3><div id="calendar-agenda-list" class="agenda-list"></div><button class="btn btn-primary" id="calendar-add-task" type="button">Add assignment</button></aside></div>
+    </section>
+
+    <!-- Kanban -->
+    <section class="extra-page" id="page-kanban" hidden>
+      <div class="page-heading"><div><p class="eyebrow">MOVE WORK FORWARD</p><h2>Kanban board</h2><p>Drag assignments between stages to update their progress.</p></div><button class="btn btn-primary" id="kanban-add-task" type="button">Add assignment</button></div>
+      <div class="kanban-board"><section class="kanban-column" data-status="Pending"><div class="kanban-column-head"><h3>To do</h3><span id="count-pending">0</span></div><div class="kanban-dropzone" id="kanban-pending"></div></section><section class="kanban-column" data-status="In Progress"><div class="kanban-column-head"><h3>In progress</h3><span id="count-progress">0</span></div><div class="kanban-dropzone" id="kanban-progress"></div></section><section class="kanban-column" data-status="Completed"><div class="kanban-column-head"><h3>Completed</h3><span id="count-completed">0</span></div><div class="kanban-dropzone" id="kanban-completed"></div></section></div>
+    </section>
+
+    <!-- Focus timer -->
+    <section class="extra-page" id="page-focus" hidden>
+      <div class="page-heading"><div><p class="eyebrow">MAKE TIME FOR DEEP WORK</p><h2>Focus timer</h2><p>Work in focused sessions, then take a proper break.</p></div></div>
+      <div class="focus-layout"><article class="panel focus-panel"><div class="focus-modes"><button class="focus-mode active" data-minutes="25" data-mode="Focus" type="button">Focus · 25 min</button><button class="focus-mode" data-minutes="5" data-mode="Short break" type="button">Short break · 5 min</button><button class="focus-mode" data-minutes="15" data-mode="Long break" type="button">Long break · 15 min</button></div><p id="focus-mode-label" class="eyebrow">FOCUS SESSION</p><div class="focus-clock" id="focus-clock">25:00</div><div class="focus-actions"><button class="btn btn-primary" id="focus-start" type="button">Start</button><button class="btn btn-secondary" id="focus-reset" type="button">Reset</button></div><p class="focus-hint" id="focus-hint">One thing at a time. You’ve got this.</p></article><aside class="panel focus-stats"><p class="eyebrow">YOUR PROGRESS</p><h3>Focus sessions</h3><strong id="focus-session-count" class="focus-stat-number">0</strong><span>sessions completed today</span><div class="focus-stat-divider"></div><strong id="focus-minutes-count" class="focus-stat-number">0</strong><span>focus minutes today</span><button class="btn btn-secondary" id="focus-clear-stats" type="button">Reset today's stats</button></aside></div>
+    </section>
+
     <!-- Analytics page -->
     <section class="extra-page" id="page-analytics" hidden>
       <div class="page-heading">

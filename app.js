@@ -83,9 +83,9 @@ function validateTask(body) {
   if (body.priority && !validPriorities.includes(body.priority)) {
     errors.push('Priority must be Low, Medium, or High.');
   }
-  const validStatuses = ['Pending', 'Completed'];
+  const validStatuses = ['Pending', 'In Progress', 'Completed'];
   if (body.status && !validStatuses.includes(body.status)) {
-    errors.push('Status must be Pending or Completed.');
+    errors.push('Status must be Pending, In Progress, or Completed.');
   }
   return errors;
 }
@@ -155,9 +155,9 @@ app.put('/api/tasks/:id', (req, res) => {
   if (body.priority && !validPriorities.includes(body.priority)) {
     return res.status(400).json({ error: 'Priority must be Low, Medium, or High.' });
   }
-  const validStatuses = ['Pending', 'Completed'];
+  const validStatuses = ['Pending', 'In Progress', 'Completed'];
   if (body.status && !validStatuses.includes(body.status)) {
-    return res.status(400).json({ error: 'Status must be Pending or Completed.' });
+    return res.status(400).json({ error: 'Status must be Pending, In Progress, or Completed.' });
   }
 
   // Update allowed fields
@@ -203,8 +203,8 @@ app.get('/api/stats', (req, res) => {
 
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'Completed').length;
-  const pending = tasks.filter(t => t.status === 'Pending').length;
-  const overdue = tasks.filter(t => t.status === 'Pending' && t.deadline < today).length;
+  const pending = tasks.filter(t => t.status !== 'Completed').length;
+  const overdue = tasks.filter(t => t.status !== 'Completed' && t.deadline < today).length;
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   res.json({
