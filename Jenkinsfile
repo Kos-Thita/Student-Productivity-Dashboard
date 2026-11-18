@@ -2,6 +2,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         EC2_HOST = '65.0.122.38'
         EC2_USER = 'ubuntu'
@@ -11,11 +15,6 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
 
         stage('Deploy to EC2') {
             steps {
