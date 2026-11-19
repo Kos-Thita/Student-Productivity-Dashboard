@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        EC2_HOST = '65.0.122.38'
+        EC2_HOST = '52.66.246.209'
         EC2_USER = 'ubuntu'
         EC2_PROJECT = '/home/ubuntu/Student-Productivity-Dashboard'
         IMAGE_NAME = 'student-productivity-dashboard'
